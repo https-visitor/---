@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+ <!DOCTYPE html>
+<html lang="hi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rudra Link Shortener & HTML Host</title>
+    <style>
+        :root { --neon: #bc13fe; --bg: #0b0e14; --glass: rgba(255, 255, 255, 0.05); }
+        body { margin: 0; font-family: 'Poppins', sans-serif; background: var(--bg); color: #fff; }
+        
+        .container { max-width: 550px; margin: 0 auto; padding: 20px; }
+        .card { background: var(--glass); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.1); border-radius: 20px; padding: 25px; margin-bottom: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+        
+        h2 { color: var(--neon); text-align: center; margin-top: 0; }
+        input, textarea { width: 100%; padding: 14px; margin: 10px 0; background: rgba(0,0,0,0.5); border: 1px solid rgba(188, 19, 254, 0.3); border-radius: 12px; color: #fff; box-sizing: border-box; outline: none; font-family: inherit; }
+        textarea { height: 120px; resize: vertical; font-family: 'Courier New', Courier, monospace; font-size: 0.9rem; }
+        
+        button { width: 100%; padding: 14px; background: var(--neon); border: none; color: #fff; font-weight: bold; border-radius: 12px; cursor: pointer; transition: 0.3s; margin-top: 5px; }
+        button:hover { transform: translateY(-2px); box-shadow: 0 5px 15px rgba(188, 19, 254, 0.4); }
+
+        .or-divider { text-align: center; margin: 15px 0; color: #555; font-size: 0.8rem; font-weight: bold; letter-spacing: 1px; }
+
+        #historyContainer { display: flex; flex-direction: column; gap: 15px; }
+        .history-card { background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.05); padding: 18px; border-radius: 15px; transition: 0.3s; }
+        
+        .slug-row { display: flex; justify-content: space-between; align-items: center; }
+        .slug-name { font-size: 1.1rem; font-weight: bold; color: #00ffcc; }
+        .click-count { background: #00ffcc; color: #000; padding: 2px 8px; border-radius: 6px; font-size: 0.75rem; font-weight: 800; }
+        
+        .link-url { font-size: 0.8rem; color: #888; word-break: break-all; margin: 10px 0; display: block; }
+        .time-info { font-size: 0.65rem; color: #555; margin-bottom: 12px; line-height: 1.4; }
+        
+        .action-btns { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+        .btn-action { padding: 8px; font-size: 0.75rem; border-radius: 8px; text-align: center; cursor: pointer; border:none; color:white; }
+        .copy-btn { background: #333; }
+        .edit-btn { background: #e67e22; }
+        .del-btn { background: #c0392b; }
+
+        .hidden { display: none; }
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div id="login-ui" class="card hidden">
+        <h2>CREATE USERNAME</h2>
+        <input type="text" id="usernameField" placeholder="@your_name">
+        <button onclick="handleLogin()">Login</button>
+    </div>
+
+    <div id="dashboard-ui" class="hidden">
+        <div class="header">
+            <span id="userTag" style="color:var(--neon); font-weight:bold;"></span>
+            <button onclick="handleLogout()" style="width:auto; padding:5px 12px; background:#222; font-size:0.7rem; color:white; border:none; border-radius:5px; cursor:pointer;">LOGOUT</button>
+        </div>
+
+        <div class="card">
+            <h2 id="formTitle">RUDRA LINK SHORTENER</h2>
+            
+            <input type="url" id="longUrl" placeholder="Target URL (https://...)" oninput="toggleInputFields('url')">
+            
+            <div class="or-divider">─── OR PASTE DIRECT HTML CODE ───</div>
+            
+            <textarea id="htmlCodeInput" placeholder="<html>\n<body>\n  <h1>Hello World</h1>\n</body>\n</html>" oninput="toggleInputFields('html')"></textarea>
+
+            <input type="text" id="customSlug" placeholder="Custom Name (slug)">
+            <button id="mainBtn" onclick="createNewLink()">Create Link</button>
+            <button id="cancelEdit" class="hidden" onclick="resetForm()" style="background:#444;">Cancel Edit</button>
+        </div>
+
+        <h3 style="margin: 30px 0 15px; border-left: 4px solid var(--neon); padding-left: 10px;">Your History</h3>
+        <div id="historyContainer"></div>
+    </div>
+
+    <div id="redirect-ui" class="card hidden" style="text-align:center;">
+        <h2 style="color:#00ffcc;">Redirecting...</h2>
+        <p>Please wait, Rudra is taking you to your destination.</p>
+    </div>
+</div>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/9.17.1/firebase-app.js";
+    import { getDatabase, ref, set, get, update, remove, onValue } from "https://www.gstatic.com/firebasejs/9.17.1/firebase-database.js";
+
+    const firebaseConfig = {
+        apiKey: "AIzaSyBjv193gNBhYKjXxk9Q4iHXqcVTHeD9IXM",
+        authDomain: "watch-1b375.firebaseapp.com",
+        databaseURL: "https://watch-1b375-default-rtdb.firebaseio.com",
+        projectId: "watch-1b375",
+        storageBucket: "watch-1b375.firebasestorage.app",
+        messagingSenderId: "963767546203",
+        appId: "1:963767546203:web:7788de1edf0a15c5a36a7e"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+    let user = localStorage.getItem('active_username');
+    let editingSlug = null;
+
+    // --- Redirection Logic (Using Hash #) ---
+    const hashID = window.location.hash.substring(1); 
+
+    if (hashID) {
+        document.getElementById('redirect-ui').classList.remove('hidden');
+        get(ref(db, 'links/' + hashID)).then(async (snap) => {
+            if (snap.exists()) {
+                await update(ref(db, 'links/' + hashID), { clicks: (snap.val().clicks || 0) + 1 });
+                const targetUrl = snap.val().url;
+                
+                // अगर डेटा Base64 HTML है, तो उसे डिकोड करके सीधा पेज पर रेंडर करेंगे
+                if(targetUrl.startsWith('data:text/html')) {
+                    try {
+                        const base64Code = targetUrl.split(',')[1];
+                        document.open();
+                        document.write(decodeURIComponent(escape(atob(base64Code))));
+                        document.close();
+                    } catch(e) {
+                        alert("HTML Code Error!");
+                    }
+                } else {
+                    window.location.replace(targetUrl);
+                }
+            } else { 
+                alert("Link not valid!"); 
+                window.location.href = window.location.origin + window.location.pathname; 
+            }
+        });
+    } else if (!user) {
+        document.getElementById('login-ui').classList.remove('hidden');
+    } else {
+        startApp();
+    }
+
+    // --- Smart Input Toggle ---
+    window.toggleInputFields = (source) => {
+        const urlInput = document.getElementById('longUrl');
+        const htmlInput = document.getElementById('htmlCodeInput');
+
+        if (source === 'url' && urlInput.value.trim() !== "") {
+            htmlInput.disabled = true;
+            htmlInput.style.opacity = "0.3";
+        } else if (source === 'html' && htmlInput.value.trim() !== "") {
+            urlInput.disabled = true;
+            urlInput.style.opacity = "0.3";
+        } else {
+            urlInput.disabled = false;
+            htmlInput.disabled = false;
+            urlInput.style.opacity = "1";
+            htmlInput.style.opacity = "1";
+        }
+    };
+
+    // --- Account Logic ---
+    window.handleLogin = () => {
+        let name = document.getElementById('usernameField').value.trim();
+        if (name.length < 3) return alert("Username too short!");
+        localStorage.setItem('active_username', name.startsWith('@') ? name : '@' + name);
+        location.reload();
+    };
+    window.handleLogout = () => { localStorage.removeItem('active_username'); location.reload(); };
+
+    function startApp() {
+        document.getElementById('dashboard-ui').classList.remove('hidden');
+        document.getElementById('userTag').innerText = user;
+        loadHistory();
+    }
+
+    // --- Create OR Update Link ---
+    window.createNewLink = async () => {
+        const url = document.getElementById('longUrl').value.trim();
+        const htmlCode = document.getElementById('htmlCodeInput').value.trim();
+        const slug = document.getElementById('customSlug').value.trim().toLowerCase().replace(/[^a-z0-9-]/g, '');
+
+        if (!url && !htmlCode) return alert("Please enter a Target URL OR Paste HTML code!");
+        if (!slug) return alert("Custom Name (slug) is required!");
+
+        // अगर HTML कोड डाला है तो उसे Base64 में बदलें, नहीं तो URL का उपयोग करें
+        let finalUrl = url;
+        if (htmlCode) {
+            if (htmlCode.length > 50000) return alert("HTML Code is too long! (Max 50KB allowed)");
+            finalUrl = "data:text/html;base64," + btoa(unescape(encodeURIComponent(htmlCode)));
+        }
+
+        try {
+            if (slug !== editingSlug) {
+                const checkSnap = await get(ref(db, 'links/' + slug));
+                if (checkSnap.exists()) return alert("This custom name is already taken!");
+            }
+
+            const payload = {
+                url: finalUrl,
+                owner: user,
+                clicks: 0,
+                created: new Date().toLocaleString(),
+                updated: editingSlug ? new Date().toLocaleString() : "Never"
+            };
+
+            if (editingSlug && editingSlug !== slug) {
+                const oldData = await get(ref(db, 'links/' + editingSlug));
+                payload.clicks = oldData.val().clicks || 0;
+                payload.created = oldData.val().created;
+                await remove(ref(ref(db, 'links/' + editingSlug)));
+            } else if (editingSlug === slug) {
+                const oldData = await get(ref(db, 'links/' + editingSlug));
+                payload.clicks = oldData.val().clicks || 0;
+                payload.created = oldData.val().created;
+            }
+
+            await set(ref(db, 'links/' + slug), payload);
+            alert(editingSlug ? "Link Updated!" : "Link Created!");
+            resetForm();
+        } catch (e) { alert("Database Error!"); }
+    };
+
+    // --- History Loader ---
+    function loadHistory() {
+        onValue(ref(db, 'links'), (snap) => {
+            const data = snap.val();
+            const container = document.getElementById('historyContainer');
+            container.innerHTML = '';
+            if (!data) return;
+
+            Object.keys(data).reverse().forEach(id => {
+                if (data[id].owner === user) {
+                    const item = data[id];
+                    const cleanLink = window.location.origin + window.location.pathname + "#" + id;
+                    const displayUrl = item.url.startsWith('data:text/html') ? "📦 Custom HTML Webpage Code" : item.url;
+                    
+                    container.innerHTML += `
+                        <div class="history-card">
+                            <div class="slug-row">
+                                <span class="slug-name">#${id}</span>
+                                <span class="click-count">${item.clicks} Clicks</span>
+                            </div>
+                            <span class="link-url">${displayUrl}</span>
+                            <div class="time-info"><b>Created:</b> ${item.created}<br><b>Edited:</b> ${item.updated}</div>
+                            <div class="action-btns">
+                                <button class="btn-action copy-btn" onclick="copyToClipboard('${cleanLink}')">Copy</button>
+                                <button class="btn-action edit-btn" onclick="startEdit('${id}', '${item.url}')">Edit</button>
+                                <button class="btn-action del-btn" onclick="deleteLink('${id}')">Delete</button>
+                            </div>
+                        </div>`;
+                }
+            });
+        });
+    }
+
+    // --- Action Helpers ---
+    window.startEdit = (id, url) => {
+        editingSlug = id;
+        resetFormInputs();
+        
+        if(url.startsWith('data:text/html')) {
+            try {
+                const base64Code = url.split(',')[1];
+                document.getElementById('htmlCodeInput').value = decodeURIComponent(escape(atob(base64Code)));
+                toggleInputFields('html');
+            } catch(e) {
+                document.getElementById('htmlCodeInput').value = "Error decoding HTML code.";
+            }
+        } else {
+            document.getElementById('longUrl').value = url;
+            toggleInputFields('url');
+        }
+
+        document.getElementById('customSlug').value = id;
+        document.getElementById('formTitle').innerText = "Editing: #" + id;
+        document.getElementById('mainBtn').innerText = "Update & Save";
+        document.getElementById('cancelEdit').classList.remove('hidden');
+        window.scrollTo(0,0);
+    };
+
+    function resetFormInputs() {
+        document.getElementById('longUrl').value = '';
+        document.getElementById('htmlCodeInput').value = '';
+        toggleInputFields('reset');
+    }
+
+    window.resetForm = () => {
+        editingSlug = null;
+        resetFormInputs();
+        document.getElementById('customSlug').value = '';
+        document.getElementById('formTitle').innerText = "RUDRA LINK SHORTENER";
+        document.getElementById('mainBtn').innerText = "Create Link";
+        document.getElementById('cancelEdit').classList.add('hidden');
+    };
+
+    window.deleteLink = async (id) => {
+        if (confirm("Delete #" + id + "?")) await remove(ref(db, 'links/' + id));
+    };
+
+    window.copyToClipboard = (txt) => {
+        navigator.clipboard.writeText(txt);
+        alert("Link Copied!");
+    };
+</script>
+</body>
+</html>
